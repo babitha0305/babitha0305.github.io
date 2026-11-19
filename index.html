@@ -37,9 +37,11 @@ img,svg{display:block}
 .mono{font-family:var(--m)}
 
 /* ---------- LOADER (reel: INITIALIZING SYSTEM / NAME / 100% / LOADING MODULES) ---------- */
-#loader{position:fixed;inset:0;z-index:400;background:radial-gradient(ellipse at 50% 40%,#2c2833,#16141a 75%);display:flex;flex-direction:column;align-items:center;justify-content:center;
-  transition:opacity .8s var(--ease),filter .8s var(--ease),visibility 0s .8s}
-#loader.out{opacity:0;filter:blur(14px);visibility:hidden}
+#loader{position:fixed;inset:0;z-index:400;background:#0a0810;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .9s var(--ease),visibility 0s .9s}
+#loader.out{opacity:0;visibility:hidden}
+#loader.out .ld-name{opacity:0;transition:none}
+#loader.out>*:not(.ld-name){opacity:0;filter:blur(8px);transition:opacity .45s,filter .45s}
 .ld-corner{position:absolute;top:26px;font:700 11px var(--m);letter-spacing:.2em;text-transform:uppercase;color:#8e8a96}
 .ld-corner.l{left:30px}.ld-corner.r{right:30px}
 .ld-name{font:400 clamp(30px,5vw,58px)/1 var(--h);letter-spacing:-.01em;text-transform:uppercase;color:#f1f1f3}
@@ -73,7 +75,14 @@ header.scrolled{background:rgba(22,20,26,.78);backdrop-filter:blur(16px);-webkit
 #pfx{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:0}
 .hero-stage .halo{position:absolute;left:50%;bottom:0;width:min(70vw,760px);height:80vh;transform:translateX(-50%);z-index:0;pointer-events:none;
   background:radial-gradient(ellipse 50% 55% at 50% 60%,rgba(236,228,255,.16),rgba(150,110,255,.08) 45%,transparent 72%)}
-#me{filter:drop-shadow(0 0 40px rgba(170,140,255,.25))}
+#me{filter:blur(0) drop-shadow(0 0 40px rgba(170,140,255,.25))}
+body:not(.hero-in) #me{opacity:0;filter:blur(14px) drop-shadow(0 0 40px rgba(170,140,255,0))}
+#me{transition:opacity 1.1s var(--ease),filter 1.1s var(--ease)}
+body:not(.hero-in) .hero-stage .halo,body:not(.hero-in) .h-left,body:not(.hero-in) .h-right,body:not(.hero-in) .h-cta,body:not(.hero-in) .scrub,body:not(.hero-in) .h-dots{opacity:0;filter:blur(10px);transform:translateY(18px)}
+.hero-stage .halo{transition:opacity 1.4s}
+.h-left,.h-cta,.scrub,.h-dots{transition:opacity .9s var(--ease),filter .9s var(--ease),transform .9s var(--ease)}
+body.hero-in .h-left{transition-delay:.25s}body.hero-in #hRight{transition-delay:.4s}body.hero-in .h-cta{transition-delay:.55s}body.hero-in .scrub,body.hero-in .h-dots{transition-delay:.7s}
+
 .hero-stage::after{content:"";position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(18,16,22,.55) 100%),linear-gradient(transparent 78%,rgba(26,24,30,.9))}
 #me{position:absolute;left:50%;bottom:0;height:90vh;width:auto;max-width:none;transform:translateX(-50%);transform-origin:50% 100%;will-change:transform;user-select:none;-webkit-user-drag:none;z-index:1}
@@ -799,10 +808,12 @@ if (CV_URL){ const d=document.getElementById("cvDl"); d.href=CV_URL; }
 (function(){
   const L=document.getElementById("loader"), pct=document.getElementById("ldPct"), bar=document.getElementById("ldBar"), msg=document.getElementById("ldMsg");
   const msgs=["Loading modules...","Cleaning 158K rows...","Training XGBoost...","Running A/B test...","Ready."];
-  const finish=()=>{ L.classList.add("out"); document.body.classList.remove("loading"); document.body.classList.add("ready"); };
-  let seen=false; try{ seen=sessionStorage.getItem("seenLoader")==="1"; sessionStorage.setItem("seenLoader","1"); }catch(e){}
-  if(reduce||seen){ L.style.display="none"; finish(); return; }
-  const t0=performance.now(), D=800;
+  const nameEl=L.querySelector(".ld-name");
+  const finish=(skip)=>{ window.__loaderDone=skip?"skip":"done";
+    if(!skip) dispatchEvent(new CustomEvent("loaderdone",{detail:{rect:nameEl.getBoundingClientRect(),font:getComputedStyle(nameEl).font}}));
+    L.classList.add("out"); document.body.classList.remove("loading"); document.body.classList.add("ready"); };
+  if(reduce){ L.style.display="none"; finish(true); return; }
+  const t0=performance.now(), D=1700;
   (function tick(t){ const k=Math.min(1,(t-t0)/D), e=1-Math.pow(1-k,2.4), v=Math.round(e*100);
     pct.textContent=v+"%"; bar.style.width=v+"%"; msg.textContent=msgs[Math.min(msgs.length-1,(k*msgs.length)|0)];
     if(k<1) requestAnimationFrame(tick); else setTimeout(finish,120); })(t0);
@@ -880,13 +891,35 @@ document.querySelectorAll("main section[id]").forEach(s=>spy.observe(s));
   }
   const TILT=[1.12,.35,1.0];
   let cur=0,prev=0,mt=1,t0=performance.now(),mx=0,my=0,smx=0,smy=0,hasM=false,run=true;
+  // intro: particles hold the loader's name, then spiral out into the galaxy
+  let IN=null; // {pts:[[x,y]...], start:ms|null}
+  const reveal=()=>document.body.classList.add("hero-in");
+  function sampleName(d){
+    const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const o=oc.getContext("2d");
+    let font=d.font||"400 48px sans-serif"; o.font=font; const txt="BABITHA MARUPALLY";
+    let m=o.measureText(txt).width; if(m>W*.92){ const f=parseFloat((font.match(/(\d+(?:\.\d+)?)px/)||[0,48])[1])*W*.92/m; font=font.replace(/\d+(?:\.\d+)?px/,f.toFixed(1)+"px"); o.font=font; }
+    o.fillStyle="#fff"; o.textAlign="center"; o.textBaseline="middle"; o.fillText(txt,d.rect.left+d.rect.width/2,d.rect.top+d.rect.height/2);
+    const im=o.getImageData(0,0,W,H).data, pts=[], g=W<700?2:3;
+    for(let y=Math.max(0,(d.rect.top-20)|0);y<Math.min(H,d.rect.bottom+20);y+=g) for(let x=0;x<W;x+=g) if(im[(y*W+x)*4+3]>120) pts.push([x,y]);
+    return pts;
+  }
+  function startIntro(d){ const pts=sampleName(d); if(pts.length<20){ reveal(); return; }
+    IN={pts:P.map(()=>pts[(Math.random()*pts.length)|0]),start:performance.now()+150};
+    P.forEach((p,i)=>{ p.x=IN.pts[i][0]; p.y=IN.pts[i][1]; });
+    ctx.fillStyle="#0a0810"; ctx.fillRect(0,0,W,H);
+    setTimeout(reveal,1500); }
+  if(window.__loaderDone==="skip") reveal();
+  addEventListener("loaderdone",e=>startIntro(e.detail));
   addEventListener("herostate",e=>{ if(e.detail!==cur){ prev=cur; cur=e.detail; mt=0; } });
   hero.addEventListener("pointermove",e=>{ const r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; hasM=true; });
   hero.addEventListener("pointerleave",()=>hasM=false);
   const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
   function frame(now){
     if(!run) return;
-    const t=(now-t0)/1000, intro=Math.min(1,t/1.8), ie=1-Math.pow(1-intro,3);
+    const t=(now-t0)/1000;
+    let ik=1, holding=false; if(IN){ ik=Math.max(0,Math.min(1,(now-IN.start)/2400)); holding=now<IN.start||!window.__loaderDone; if(ik>=1&&!holding) IN=null; }
+    if(!window.__loaderDone){ requestAnimationFrame(frame); return; } // loader still covering the page
+    const ie=1;
     const r=hero.getBoundingClientRect(), total=Math.max(1,hero.offsetHeight-innerHeight), sp=Math.min(1,Math.max(0,-r.top/total));
     mt=Math.min(1,mt+1/80); const m=ease(mt);
     smx+=((hasM?mx/W-.5:0)-smx)*.05; smy+=((hasM?my/H-.5:0)-smy)*.05;
@@ -903,8 +936,13 @@ document.querySelectorAll("main section[id]").forEach(s=>spy.observe(s));
       let X=x*cyw-z*syw, Z=x*syw+z*cyw, Y=y*ct-Z*st; Z=y*st+Z*ct;
       const k=2.6/(2.6+Z); let sx=cx+X*S*k, sy=cy+Y*S*k;
       if(hasM){ const dx=sx-mx, dy=sy-my, d2=dx*dx+dy*dy; if(d2<16000){ const f=(1-d2/16000)*38; const d=Math.sqrt(d2)||1; sx+=dx/d*f; sy+=dy/d*f; } }
-      p.x+=(sx-p.x)*.16; p.y+=(sy-p.y)*.16;
-      const al=Math.min(1,Math.max(.08,(1.4-Z)*.55))*fade, c=p.col, s=p.sz*k*(W<700?.9:1.1);
+      if(IN){ const tp=IN.pts[i];
+        if(holding){ sx=tp[0]+Math.sin(t*3+p.ph)*.4; sy=tp[1]+Math.cos(t*3+p.ph)*.4; }
+        else { const e=ease(ik), a=e*(2.2+p.sp), dx=tp[0]-cx, dy=tp[1]-cy, ca=Math.cos(a), sa=Math.sin(a);
+          const rx=cx+(dx*ca-dy*sa)*(1-e*.4), ry=cy+(dx*sa+dy*ca)*(1-e*.4); sx=rx+(sx-rx)*e; sy=ry+(sy-ry)*e; }
+        p.x=sx; p.y=sy;
+      } else { p.x+=(sx-p.x)*.16; p.y+=(sy-p.y)*.16; }
+      const al=IN?(holding?.95:.95-(.95-Math.min(1,Math.max(.08,(1.4-Z)*.55))*fade)*ease(ik)):Math.min(1,Math.max(.08,(1.4-Z)*.55))*fade, c=p.col, s=IN&&holding?1.6:p.sz*k*(W<700?.9:1.1);
       ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${al.toFixed(3)})`; ctx.fillRect(p.x-s/2,p.y-s/2,s,s);
     }
     requestAnimationFrame(frame);
