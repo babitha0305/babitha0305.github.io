@@ -76,9 +76,11 @@ header.scrolled{background:rgba(22,20,26,.78);backdrop-filter:blur(16px);-webkit
 .hero-stage .halo{position:absolute;left:50%;bottom:0;width:min(70vw,760px);height:80vh;transform:translateX(-50%);z-index:0;pointer-events:none;
   background:radial-gradient(ellipse 50% 55% at 50% 60%,rgba(236,228,255,.16),rgba(150,110,255,.08) 45%,transparent 72%)}
 #me{filter:blur(0) drop-shadow(0 0 40px rgba(170,140,255,.25))}
-body:not(.hero-in) #me{opacity:0;filter:blur(14px) drop-shadow(0 0 40px rgba(170,140,255,0))}
-#me{transition:opacity 1.1s var(--ease),filter 1.1s var(--ease)}
-body:not(.hero-in) .hero-stage .halo,body:not(.hero-in) .h-left,body:not(.hero-in) .h-right,body:not(.hero-in) .h-cta,body:not(.hero-in) .scrub,body:not(.hero-in) .h-dots{opacity:0;filter:blur(10px);transform:translateY(18px)}
+body:not(.photo-in) #me{opacity:0;filter:blur(14px) drop-shadow(0 0 40px rgba(170,140,255,0))}
+#me{transition:opacity 1.3s var(--ease),filter 1.3s var(--ease)}
+body.photo-done #me{transition:none}
+body:not(.photo-in) .hero-stage .halo{opacity:0}
+body:not(.hero-in) .h-left,body:not(.hero-in) .h-right,body:not(.hero-in) .h-cta,body:not(.hero-in) .scrub,body:not(.hero-in) .h-dots{opacity:0;filter:blur(10px);transform:translateY(18px)}
 .hero-stage .halo{transition:opacity 1.4s}
 .h-left,.h-cta,.scrub,.h-dots{transition:opacity .9s var(--ease),filter .9s var(--ease),transform .9s var(--ease)}
 body.hero-in .h-left{transition-delay:.25s}body.hero-in #hRight{transition-delay:.4s}body.hero-in .h-cta{transition-delay:.55s}body.hero-in .scrub,body.hero-in .h-dots{transition-delay:.7s}
@@ -866,92 +868,63 @@ document.querySelectorAll("main section[id]").forEach(s=>spy.observe(s));
 })();
 
 
-/* ---------- hero particles: a swirling nebula that morphs galaxy -> sphere -> torus as the headline changes ---------- */
+/* ---------- hero intro: loader name -> particles -> they build the portrait -> real photo fades in through them ---------- */
 (function(){
-  const cv=document.getElementById("pfx"), hero=document.getElementById("home"); if(!cv) return;
-  const ctx=cv.getContext("2d");
-  let W=0,H=0,DPR=1,N=0,P=[];
+  const cv=document.getElementById("pfx"), hero=document.getElementById("home"), img=document.getElementById("me"); if(!cv||!img) return;
+  const ctx=cv.getContext("2d"), B=document.body;
   const PAL=[[124,58,237],[236,72,153],[59,130,246],[34,211,238],[244,114,182]];
-  function build(){
-    DPR=Math.min(devicePixelRatio||1,1.5); W=cv.clientWidth; H=cv.clientHeight;
-    cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
-    const n=W<700?1100:2400; if(n===N) return; N=n; P=[];
-    for(let i=0;i<N;i++){ const c1=PAL[i%5], c2=PAL[(i*7+2)%5], m=Math.random();
-      P.push({u:Math.random(),v:Math.random(),a:i%3,g:(Math.random()+Math.random()+Math.random()-1.5),ph:Math.random()*6.283,
-        sp:.4+Math.random()*1.2,col:c1.map((c,k)=>Math.round(c*(1-m)+c2[k]*m)),x:W/2,y:H/2,sz:.6+Math.random()*1.6}); }
+  let W=0,H=0,P=[],NAME=null,phase="wait",t0=0,raf=0;
+  const ease=v=>v<.5?4*v*v*v:1-Math.pow(-2*v+2,3)/2, lerp=(a,b,k)=>a+(b-a)*k;
+  function size(){ const d=Math.min(devicePixelRatio||1,1.5); W=cv.clientWidth; H=cv.clientHeight; cv.width=W*d; cv.height=H*d; ctx.setTransform(d,0,0,d,0,0); }
+  function samplePortrait(){ // positions stored relative to the photo, so particles stay locked to it
+    const r=img.getBoundingClientRect(), g=W<700?3:4, oc=document.createElement("canvas"); oc.width=Math.max(1,r.width|0); oc.height=Math.max(1,r.height|0);
+    const o=oc.getContext("2d"); o.drawImage(img,0,0,oc.width,oc.height); const d=o.getImageData(0,0,oc.width,oc.height).data, out=[];
+    for(let y=0;y<oc.height;y+=g) for(let x=0;x<oc.width;x+=g){ const k=(y*oc.width+x)*4; if(d[k+3]>200){
+      const c=[d[k],d[k+1],d[k+2]].map(v=>Math.min(255,v*1.12+14)); out.push({u:x/oc.width,v:y/oc.height,col:c,pal:PAL[out.length%5],ph:Math.random()*6.283,sp:.6+Math.random()*.9,x:0,y:0}); } }
+    return out;
   }
-  const GOLD=Math.PI*(3-Math.sqrt(5));
-  function shape(k,p,i,t){ // unit-space 3D point for particle p in shape k
-    if(k===0){ const r=.08+Math.pow(p.u,.7)*1.05, th=p.a*2.094+r*4.2+p.g*.32/(r+.35)+t*.12;
-      return [Math.cos(th)*r,p.g*.05*(1.2-r),Math.sin(th)*r]; }
-    if(k===1){ const y=1-2*(i+.5)/N, rr=Math.sqrt(1-y*y), th=i*GOLD+t*.25, br=.78+.05*Math.sin(t*1.3+p.ph)+p.g*.03;
-      return [Math.cos(th)*rr*br,y*br,Math.sin(th)*rr*br]; }
-    const a=p.u*6.283+t*.3, b=p.v*6.283*3+t*.6, R=.72, r=.26+p.g*.03;
-    return [(R+r*Math.cos(b))*Math.cos(a),r*Math.sin(b),(R+r*Math.cos(b))*Math.sin(a)];
-  }
-  const TILT=[1.12,.35,1.0];
-  let cur=0,prev=0,mt=1,t0=performance.now(),mx=0,my=0,smx=0,smy=0,hasM=false,run=true;
-  // intro: particles hold the loader's name, then spiral out into the galaxy
-  let IN=null; // {pts:[[x,y]...], start:ms|null}
-  const reveal=()=>document.body.classList.add("hero-in");
-  function sampleName(d){
-    const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const o=oc.getContext("2d");
-    let font=d.font||"400 48px sans-serif"; o.font=font; const txt="BABITHA MARUPALLY";
-    let m=o.measureText(txt).width; if(m>W*.92){ const f=parseFloat((font.match(/(\d+(?:\.\d+)?)px/)||[0,48])[1])*W*.92/m; font=font.replace(/\d+(?:\.\d+)?px/,f.toFixed(1)+"px"); o.font=font; }
+  function sampleName(d){ const oc=document.createElement("canvas"); oc.width=W; oc.height=H; const o=oc.getContext("2d");
+    let font=d.font||"400 48px sans-serif"; o.font=font; const txt="BABITHA MARUPALLY", m=o.measureText(txt).width;
+    if(m>W*.92){ const f=parseFloat((font.match(/(\d+(?:\.\d+)?)px/)||[0,48])[1])*W*.92/m; font=font.replace(/\d+(?:\.\d+)?px/,f.toFixed(1)+"px"); o.font=font; }
     o.fillStyle="#fff"; o.textAlign="center"; o.textBaseline="middle"; o.fillText(txt,d.rect.left+d.rect.width/2,d.rect.top+d.rect.height/2);
-    const im=o.getImageData(0,0,W,H).data, pts=[], g=W<700?2:3;
-    for(let y=Math.max(0,(d.rect.top-20)|0);y<Math.min(H,d.rect.bottom+20);y+=g) for(let x=0;x<W;x+=g) if(im[(y*W+x)*4+3]>120) pts.push([x,y]);
-    return pts;
+    const im=o.getImageData(0,0,W,H).data, pts=[];
+    for(let y=Math.max(0,(d.rect.top-20)|0);y<Math.min(H,d.rect.bottom+20);y+=2) for(let x=0;x<W;x+=2) if(im[(y*W+x)*4+3]>120) pts.push([x,y]);
+    return pts; }
+  const photoIn=()=>B.classList.add("photo-in"), textIn=()=>B.classList.add("hero-in");
+  function begin(detail){
+    size(); P=samplePortrait(); if(P.length<50){ photoIn(); textIn(); return; }
+    const pts=detail?sampleName(detail):[];
+    P.forEach(p=>{ const q=pts.length?pts[(Math.random()*pts.length)|0]:[W/2+(Math.random()-.5)*W,H/2+(Math.random()-.5)*H]; p.sx=q[0]; p.sy=q[1]; p.x=q[0]; p.y=q[1]; });
+    phase="build"; t0=performance.now();
+    setTimeout(photoIn,2500); setTimeout(()=>{ textIn(); B.classList.add("photo-done"); },3700);
+    if(!raf) raf=requestAnimationFrame(frame);
   }
-  function startIntro(d){ const pts=sampleName(d); if(pts.length<20){ reveal(); return; }
-    IN={pts:P.map(()=>pts[(Math.random()*pts.length)|0]),start:performance.now()+150};
-    P.forEach((p,i)=>{ p.x=IN.pts[i][0]; p.y=IN.pts[i][1]; });
-    ctx.fillStyle="#0a0810"; ctx.fillRect(0,0,W,H);
-    setTimeout(reveal,1500); }
-  if(window.__loaderDone==="skip") reveal();
-  addEventListener("loaderdone",e=>startIntro(e.detail));
-  addEventListener("herostate",e=>{ if(e.detail!==cur){ prev=cur; cur=e.detail; mt=0; } });
-  hero.addEventListener("pointermove",e=>{ const r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; hasM=true; });
-  hero.addEventListener("pointerleave",()=>hasM=false);
-  const ease=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
-  function frame(now){
-    if(!run) return;
-    const t=(now-t0)/1000;
-    let ik=1, holding=false; if(IN){ ik=Math.max(0,Math.min(1,(now-IN.start)/2400)); holding=now<IN.start||!window.__loaderDone; if(ik>=1&&!holding) IN=null; }
-    if(!window.__loaderDone){ requestAnimationFrame(frame); return; } // loader still covering the page
-    const ie=1;
-    const r=hero.getBoundingClientRect(), total=Math.max(1,hero.offsetHeight-innerHeight), sp=Math.min(1,Math.max(0,-r.top/total));
-    mt=Math.min(1,mt+1/80); const m=ease(mt);
-    smx+=((hasM?mx/W-.5:0)-smx)*.05; smy+=((hasM?my/H-.5:0)-smy)*.05;
-    ctx.globalCompositeOperation="source-over"; ctx.fillStyle="rgba(10,8,16,.2)"; ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation="lighter";
-    const ex=Math.max(0,sp-.8)/.2, S=(W<700?W*.5:Math.min(W,H)*.42)*(.15+.85*ie)*(1+ex*ex*1.2), cx=W*.5, cy=H*(W<700?.34:.44), fade=(1-ex*.9)*(.35+.65*ie);
-    const yaw=t*.15+smx*.9, tl=TILT[prev]*(1-m)+TILT[cur]*m+smy*.4, cyw=Math.cos(yaw), syw=Math.sin(yaw), ct=Math.cos(tl), st=Math.sin(tl);
-    const swirl=Math.sin(m*Math.PI)*1.6; // extra spin mid-morph
-    for(let i=0;i<N;i++){ const p=P[i];
-      const A=shape(prev,p,i,t), B=shape(cur,p,i,t);
-      let x=A[0]+(B[0]-A[0])*m, y=A[1]+(B[1]-A[1])*m, z=A[2]+(B[2]-A[2])*m;
-      if(swirl){ const ca=Math.cos(swirl*p.sp), sa=Math.sin(swirl*p.sp); const nx=x*ca-z*sa; z=x*sa+z*ca; x=nx; }
-      x+=Math.sin(t*p.sp+p.ph)*.015; y+=Math.cos(t*p.sp*1.3+p.ph)*.015;
-      let X=x*cyw-z*syw, Z=x*syw+z*cyw, Y=y*ct-Z*st; Z=y*st+Z*ct;
-      const k=2.6/(2.6+Z); let sx=cx+X*S*k, sy=cy+Y*S*k;
-      if(hasM){ const dx=sx-mx, dy=sy-my, d2=dx*dx+dy*dy; if(d2<16000){ const f=(1-d2/16000)*38; const d=Math.sqrt(d2)||1; sx+=dx/d*f; sy+=dy/d*f; } }
-      if(IN){ const tp=IN.pts[i];
-        if(holding){ sx=tp[0]+Math.sin(t*3+p.ph)*.4; sy=tp[1]+Math.cos(t*3+p.ph)*.4; }
-        else { const e=ease(ik), a=e*(2.2+p.sp), dx=tp[0]-cx, dy=tp[1]-cy, ca=Math.cos(a), sa=Math.sin(a);
-          const rx=cx+(dx*ca-dy*sa)*(1-e*.4), ry=cy+(dx*sa+dy*ca)*(1-e*.4); sx=rx+(sx-rx)*e; sy=ry+(sy-ry)*e; }
-        p.x=sx; p.y=sy;
-      } else { p.x+=(sx-p.x)*.16; p.y+=(sy-p.y)*.16; }
-      const al=IN?(holding?.95:.95-(.95-Math.min(1,Math.max(.08,(1.4-Z)*.55))*fade)*ease(ik)):Math.min(1,Math.max(.08,(1.4-Z)*.55))*fade, c=p.col, s=IN&&holding?1.6:p.sz*k*(W<700?.9:1.1);
-      ctx.fillStyle=`rgba(${c[0]},${c[1]},${c[2]},${al.toFixed(3)})`; ctx.fillRect(p.x-s/2,p.y-s/2,s,s);
+  function frame(now){ raf=0;
+    const r=img.getBoundingClientRect(), t=(now-t0)/1000;
+    const hr=hero.getBoundingClientRect(), total=Math.max(1,hero.offsetHeight-innerHeight), sp=Math.min(1,Math.max(0,-hr.top/total)), ex=Math.max(0,sp-.72)/.28;
+    let draw=false;
+    if(phase==="build"){ draw=true; if(t>4.2) phase="idle"; }
+    if(phase==="idle"){ draw=ex>0; img.style.opacity=ex>0?String(1-Math.min(1,ex*1.8)):""; }
+    ctx.globalCompositeOperation="source-over";
+    if(draw){ ctx.fillStyle=phase==="build"?(t>1.7?"rgba(10,8,16,.6)":"rgba(10,8,16,.28)"):"#0a0810"; ctx.fillRect(0,0,W,H); } else ctx.clearRect(0,0,W,H);
+    if(draw){ const cx=r.left+r.width/2, cy=r.top+r.height*.45, s=W<700?2.1:2.7;
+      const k=Math.min(1,t/2.3), e=ease(k), fadeB=phase==="build"?(t<2.6?1:Math.max(0,1-(t-2.6)/1.4)):Math.min(1,ex*3)*(1-ex);
+      for(const p of P){ const tx=r.left+p.u*r.width, ty=r.top+p.v*r.height; let x,y,col;
+        if(phase==="build"){ const a=(1-e)*(3+p.sp*2), dx=p.sx-cx, dy=p.sy-cy, ca=Math.cos(a), sa=Math.sin(a);
+          const sx=cx+dx*ca-dy*sa, sy=cy+dx*sa+dy*ca; x=lerp(sx,tx,e)+Math.sin(t*3+p.ph)*(1-e)*14; y=lerp(sy,ty,e)+Math.cos(t*3+p.ph)*(1-e)*14;
+          if(e>=1){ x+=Math.sin(t*4+p.ph)*.6; y+=Math.cos(t*4+p.ph)*.6; }
+          const ce=Math.min(1,Math.max(0,(k-.35)/.5)); col=[0,1,2].map(i=>Math.round(lerp(p.pal[i],p.col[i],ce)));
+          p.x+=(x-p.x)*.35; p.y+=(y-p.y)*.35; }
+        else { x=tx+(tx-cx)*ex*1.6+Math.sin(p.ph*3)*ex*120; y=ty+(ty-cy)*ex*1.2-ex*ex*160*p.sp; col=p.col; p.x=x; p.y=y; }
+        ctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${fadeB.toFixed(3)})`; ctx.fillRect(p.x,p.y,s,s); }
     }
-    requestAnimationFrame(frame);
+    if(phase!=="wait") raf=requestAnimationFrame(frame);
   }
-  build(); addEventListener("resize",build);
-  if(reduce){ run=false; ctx.fillStyle="#0a0810"; ctx.fillRect(0,0,W,H); t0=performance.now()-4000; run=true; frame(performance.now()); run=false; return; }
-  new IntersectionObserver(es=>es.forEach(en=>{ const on=en.isIntersecting&&!document.hidden; if(on&&!run){ run=true; requestAnimationFrame(frame); } else if(!on) run=false; })).observe(hero);
-  document.addEventListener("visibilitychange",()=>{ if(document.hidden) run=false; else if(!run){ run=true; requestAnimationFrame(frame); } });
-  requestAnimationFrame(frame);
+  const ready=img.decode?img.decode().catch(()=>{}):Promise.resolve();
+  function onDone(detail){ ready.then(()=>requestAnimationFrame(()=>begin(detail))); }
+  if(reduce||window.__loaderDone==="skip"){ photoIn(); textIn(); B.classList.add("photo-done"); return; }
+  if(window.__loaderDone==="done") onDone(null); else addEventListener("loaderdone",e=>onDone(e.detail),{once:true});
+  addEventListener("resize",()=>{ if(phase!=="wait") size(); });
 })();
 
 /* ---------- blur-in reveals ---------- */
